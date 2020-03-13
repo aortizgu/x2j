@@ -2,45 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
-	"strings"
+	"log"
+	"os"
 
 	"github.com/tealeg/xlsx/v2"
 )
 
-var defaultX2JSON = New()
-
-type X2JSON struct {
-	toLower bool
-	toUpper bool
-}
-
-func New() X2JSON {
-	return X2JSON{}
-}
-
-func (x *X2JSON) ToUpper() *X2JSON {
-	x.toUpper = true
-	x.toLower = false
-	return x
-}
-
-func (x *X2JSON) ToLower() *X2JSON {
-	x.toUpper = false
-	x.toLower = true
-	return x
-}
-
-func (x *X2JSON) toCase(s string) string {
-	if x.toLower {
-		return strings.ToLower(s)
-	} else if x.toUpper {
-		return strings.ToUpper(s)
-	}
-	return s
-}
-
-func (x *X2JSON) sheet2Map(sheet *xlsx.Sheet) ([]map[string]string, error) {
+func sheet2Map(sheet *xlsx.Sheet) ([]map[string]string, error) {
 	if len(sheet.Rows) < 1 {
 		return nil, fmt.Errorf("sheet rows error")
 	}
@@ -50,7 +20,7 @@ func (x *X2JSON) sheet2Map(sheet *xlsx.Sheet) ([]map[string]string, error) {
 		if len(c.Value) == 0 {
 			break
 		}
-		titles = append(titles, x.toCase(c.Value))
+		titles = append(titles, c.Value)
 	}
 	converts := []map[string]string{}
 	for _, r := range sheet.Rows[1:] {
@@ -72,20 +42,21 @@ func (x *X2JSON) sheet2Map(sheet *xlsx.Sheet) ([]map[string]string, error) {
 	return converts, nil
 }
 
-func (x *X2JSON) xlsx2Map(xFile *xlsx.File) map[string][]map[string]string {
-	responseJson := map[string][]map[string]string{}
+func xlsx2Map(xFile *xlsx.File) map[string][]map[string]string {
+	responseJSON := map[string][]map[string]string{}
 	for _, s := range xFile.Sheets {
-		c, err := x.sheet2Map(s)
+		c, err := sheet2Map(s)
 		if err != nil {
 			continue
 		}
-		responseJson[x.toCase(s.Name)] = c
+		responseJSON[s.Name] = c
 	}
-	return responseJson
+	return responseJSON
 }
 
-func (x *X2JSON) Convert(xFile *xlsx.File) (json.RawMessage, error) {
-	data, err := json.Marshal(x.xlsx2Map(xFile))
+//Convert xlsx to json
+func Convert(xFile *xlsx.File) (json.RawMessage, error) {
+	data, err := json.Marshal(xlsx2Map(xFile))
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +64,36 @@ func (x *X2JSON) Convert(xFile *xlsx.File) (json.RawMessage, error) {
 	return json.RawMessage(data), nil
 }
 
-func Convert(xFile *xlsx.File) (json.RawMessage, error) {
-	return defaultX2JSON.Convert(xFile)
+func main() {
+	iName := flag.String("i", "input.xlsx", "input file")
+	oName := flag.String("o", "output.json", "output file")
+	flag.Parse()
+
+	xFile, err := xlsx.OpenFile(*iName)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	res, err := Convert(xFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	prettyJSON, err := json.MarshalIndent(res, "", "    ")
+	if err != nil {
+		log.Fatal("Failed to generate json", err)
+	}
+
+	f, err := os.Create(*oName)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+	_, err = f.Write(prettyJSON)
+	if err != nil {
+		fmt.Println(err)
+		f.Close()
+		return
+	}
 }
