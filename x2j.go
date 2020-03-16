@@ -24,7 +24,7 @@ func sheet2Map(sheet *xlsx.Sheet) ([]map[string]string, error) {
 	}
 	converts := []map[string]string{}
 	for _, r := range sheet.Rows[1:] {
-		if len(r.Cells[0].Value) == 0 {
+		if  len(r.Cells) == 0 || len(r.Cells[0].Value) == 0 {
 			break
 		}
 		convertMap := map[string]string{}
